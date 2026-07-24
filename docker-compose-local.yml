@@ -1,77 +1,76 @@
-version: '3.2'
 services:
-  redis:
-    image: 'bitnami/redis:latest'
-    restart: always
-    container_name: redis
-    ports:
-      - 6379:6379
-    environment:
-      ALLOW_EMPTY_PASSWORD: 'yes'
   db:
-    image: docker.io/bitnami/postgresql:14
-    restart: always
-    container_name: db
+    image: postgres:16-alpine
+    container_name: cg_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet
+    # Host ports shifted to avoid clashing with a default 5432/6379 already running.
     ports:
-      - 5432:5432
-    env_file:
-      - .db.env
+      - '5433:5432'
     volumes:
-      - ./docker/db:/var/lib/postgresql/data
-  api:
-    image: 'crypto-api:latest'
-    restart: always
-    container_name: api
+      - cg_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wallet']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cg_redis
+    restart: unless-stopped
     ports:
-      - 3000:3000
+      - '6380:6379'
+
+  # One-off: applies migrations and seeds platform data, then exits.
+  migrate:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    image: crypto-gateway-api:latest
+    container_name: cg_migrate
+    env_file:
+      - .common.env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed"
+    restart: 'no'
+
+  api:
+    image: crypto-gateway-api:latest
+    container_name: cg_api
+    restart: unless-stopped
     env_file:
       - .common.env
       - .api.env
-    depends_on:
-      - db
-      - redis
-  admin-api:
-    image: 'crypto-admin-api:latest'
-    restart: always
-    container_name: admin-api
     ports:
-      - 3001:3001
+      - '3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    command: node dist/apps/api/main
+
+  admin-api:
+    image: crypto-gateway-api:latest
+    container_name: cg_admin_api
+    restart: unless-stopped
     env_file:
       - .common.env
       - .admin-api.env
+    ports:
+      - '4000:4000'
     depends_on:
-      - db
-      - redis
-  worker-charger:
-    image: 'crypto-worker:latest'
-    restart: always
-    container_name: worker-charger
-    env_file:
-      - .common.env
-      - .worker-charger.env
-    depends_on:
-      - db
-      - redis
-  worker-checker:
-    image: 'crypto-worker:latest'
-    restart: always
-    container_name: worker-checker
-    env_file:
-      - .common.env
-      - .worker-checker.env
-    depends_on:
-      - db
-      - redis
-  worker-block-scanner:
-    image: 'crypto-worker:latest'
-    restart: always
-    container_name: worker-block-scanner
-    env_file:
-      - .common.env
-      - .worker-block-scanner.env
-    depends_on:
-      - db
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    command: node dist/apps/admin-api/main
+
 volumes:
-  vhost.d: {}
-  html: {}
+  cg_db_data: {}
