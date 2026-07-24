@@ -1,0 +1,77 @@
+version: '3.2'
+services:
+  redis:
+    image: 'bitnami/redis:latest'
+    restart: always
+    container_name: redis
+    ports:
+      - 6379:6379
+    environment:
+      ALLOW_EMPTY_PASSWORD: 'yes'
+  db:
+    image: docker.io/bitnami/postgresql:14
+    restart: always
+    container_name: db
+    ports:
+      - 5432:5432
+    env_file:
+      - .db.env
+    volumes:
+      - ./docker/db:/var/lib/postgresql/data
+  api:
+    image: 'crypto-api:latest'
+    restart: always
+    container_name: api
+    ports:
+      - 3000:3000
+    env_file:
+      - .common.env
+      - .api.env
+    depends_on:
+      - db
+      - redis
+  admin-api:
+    image: 'crypto-admin-api:latest'
+    restart: always
+    container_name: admin-api
+    ports:
+      - 3001:3001
+    env_file:
+      - .common.env
+      - .admin-api.env
+    depends_on:
+      - db
+      - redis
+  worker-charger:
+    image: 'crypto-worker:latest'
+    restart: always
+    container_name: worker-charger
+    env_file:
+      - .common.env
+      - .worker-charger.env
+    depends_on:
+      - db
+      - redis
+  worker-checker:
+    image: 'crypto-worker:latest'
+    restart: always
+    container_name: worker-checker
+    env_file:
+      - .common.env
+      - .worker-checker.env
+    depends_on:
+      - db
+      - redis
+  worker-block-scanner:
+    image: 'crypto-worker:latest'
+    restart: always
+    container_name: worker-block-scanner
+    env_file:
+      - .common.env
+      - .worker-block-scanner.env
+    depends_on:
+      - db
+      - redis
+volumes:
+  vhost.d: {}
+  html: {}
