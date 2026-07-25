@@ -72,5 +72,51 @@ services:
         condition: service_started
     command: node dist/apps/admin-api/main
 
+  # Deposit pipeline workers (one image, role via WORKER_TYPE).
+  worker-block-scanner:
+    image: crypto-gateway-api:latest
+    container_name: cg_worker_scanner
+    restart: unless-stopped
+    env_file:
+      - .common.env
+    environment:
+      WORKER_TYPE: block_scanner
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    command: node dist/apps/worker/main
+
+  worker-checker:
+    image: crypto-gateway-api:latest
+    container_name: cg_worker_checker
+    restart: unless-stopped
+    env_file:
+      - .common.env
+    environment:
+      WORKER_TYPE: checker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    command: node dist/apps/worker/main
+
+  worker-charger:
+    image: crypto-gateway-api:latest
+    container_name: cg_worker_charger
+    restart: unless-stopped
+    env_file:
+      - .common.env
+    environment:
+      WORKER_TYPE: charger
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    command: node dist/apps/worker/main
+
 volumes:
   cg_db_data: {}
